@@ -6,7 +6,10 @@ local M = {}
 local is_windows = string.match(wezterm.target_triple, 'windows') ~= nil
 local separator = is_windows and '\\' or '/'
 
-local plugin_dir = wezterm.plugin.list()[1].plugin_dir:gsub(separator .. '[^' .. separator .. ']*$', '')
+-- wezterm.plugin.list() is empty when the plugin was not installed through
+-- wezterm.plugin.require (for example a manual clone on a fresh machine).
+local first_plugin = wezterm.plugin.list()[1]
+local plugin_dir = first_plugin and first_plugin.plugin_dir:gsub(separator .. '[^' .. separator .. ']*$', '')
 
 function plugin_package_path()
 
@@ -86,9 +89,11 @@ function plugin_package_path()
 
 end
 
-package.path = package.path
-  .. ';'
-  .. plugin_package_path()
+if plugin_dir then
+  package.path = package.path
+    .. ';'
+    .. plugin_package_path()
+end
 
 function M.setup(opts)
   require('tabline.config').set(opts)
