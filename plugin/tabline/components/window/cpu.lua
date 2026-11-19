@@ -11,26 +11,24 @@ return {
     use_pwsh = false,
   },
   update = function(_, opts)
+    if string.match(wezterm.target_triple, 'windows') ~= nil then
+      -- Non-blocking sampler (see tabline/winstats.lua); never raises.
+      local ok, cpu = pcall(function()
+        local stats = require('tabline.winstats').get(opts.throttle)
+        if not stats then
+          return ''
+        end
+        return string.format('%.2f%%', stats.cpu)
+      end)
+      return ok and cpu or ''
+    end
+
     local current_time = os.time()
     if current_time - last_update_time < opts.throttle then
       return last_result
     end
     local success, result
-    if string.match(wezterm.target_triple, 'windows') ~= nil then
-      if opts.use_pwsh then
-        success, result = wezterm.run_child_process {
-          'powershell.exe',
-          '-Command',
-          'Get-CimInstance Win32_Processor | Select-Object -ExpandProperty LoadPercentage',
-        }
-      else
-        success, result = wezterm.run_child_process {
-          'cmd.exe',
-          '/C',
-          'wmic cpu get loadpercentage',
-        }
-      end
-    elseif string.match(wezterm.target_triple, 'linux') ~= nil then
+    if string.match(wezterm.target_triple, 'linux') ~= nil then
       success, result = wezterm.run_child_process {
         'bash',
         '-c',
@@ -58,15 +56,7 @@ return {
     end
 
     local cpu
-    if string.match(wezterm.target_triple, 'windows') ~= nil then
-      if opts.use_pwsh then
-        cpu = tonumber(result:match('%d+%.?%d*') or '0')
-      else
-        cpu = result:match('%d+')
-      end
-    else
-      cpu = result:gsub('^%s*(.-)%s*$', '%1')
-    end
+    cpu = result:gsub('^%s*(.-)%s*$', '%1')
 
     if string.match(wezterm.target_triple, 'darwin') ~= nil then
       success, result = wezterm.run_child_process {

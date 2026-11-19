@@ -10,33 +10,24 @@ return {
     use_pwsh = false,
   },
   update = function(_, opts)
+    if string.match(wezterm.target_triple, 'windows') ~= nil then
+      -- Non-blocking sampler (see tabline/winstats.lua); never raises.
+      local ok, ram = pcall(function()
+        local stats = require('tabline.winstats').get(opts.throttle)
+        if not stats then
+          return ''
+        end
+        return string.format('%.2f GB', (stats.total_kb - stats.avail_kb) / 1024 / 1024)
+      end)
+      return ok and ram or ''
+    end
+
     local current_time = os.time()
     if current_time - last_update_time < opts.throttle then
       return last_result
     end
     local success, result
-    if string.match(wezterm.target_triple, 'windows') ~= nil then
-      if opts.use_pwsh then
-        success, result = wezterm.run_child_process {
-          'powershell.exe',
-          '-Command',
-          'Get-CimInstance Win32_OperatingSystem | ForEach-Object { $_.TotalVisibleMemorySize - $_.FreePhysicalMemory }',
-        }
-      else
-        local free, total
-        success, free = wezterm.run_child_process {
-          'cmd.exe',
-          '/C',
-          'wmic OS get FreePhysicalMemory'
-        }
-        success, total = wezterm.run_child_process {
-          'cmd.exe',
-          '/C',
-          'wmic OS get TotalVisibleMemorySize'
-        }
-        result = tostring(tonumber(total:match('%d+')) - tonumber(free:match('%d+')))
-      end
-    elseif string.match(wezterm.target_triple, 'linux') ~= nil then
+    if string.match(wezterm.target_triple, 'linux') ~= nil then
       success, result =
         wezterm.run_child_process { 'bash', '-c', 'free -m | LC_NUMERIC=C awk \'NR==2{printf "%.2f", $3/1000 }\'' }
     elseif string.match(wezterm.target_triple, 'darwin') ~= nil then
@@ -68,14 +59,6 @@ return {
       local compressed_memory = result:match('Pages occupied by compressor: +(%d+).')
       local used_memory = (app_memory + wired_memory + compressed_memory) * page_size / 1024 / 1024 / 1024
       ram = string.format('%.2f GB', used_memory)
-    elseif string.match(wezterm.target_triple, 'windows') ~= nil then
-      if opts.use_pwsh then
-        ram = tonumber(result:match('%d+%.?%d*') or '0')
-        ram = string.format('%.2f GB', ram / 1024 / 1024)
-      else
-        ram = result:match('%d+')
-        ram = string.format('%.2f GB', tonumber(ram) / 1024 / 1024)
-      end
     elseif string.match(wezterm.target_triple, 'freebsd') ~= nil then
       local pg_sz, mem_free, mem_inact, mem_act, mem_wired, mem_laundry = result:match( '(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s(%d+)%s(%d+)' )
       local used = tonumber(mem_wired) + tonumber(mem_act) + tonumber(mem_laundry)

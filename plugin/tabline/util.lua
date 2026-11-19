@@ -68,6 +68,20 @@ local function require_component(object, v)
   return component
 end
 
+-- A failing component must not abort the whole status update: log once, skip it.
+local logged_failures = {}
+local function safe_update(name, component, object, opts)
+  local ok, result = pcall(component.update, object, opts)
+  if ok then
+    return result
+  end
+  if not logged_failures[name] then
+    logged_failures[name] = true
+    wezterm.log_error('tabline: component "' .. tostring(name) .. '" failed: ' .. tostring(result))
+  end
+  return nil
+end
+
 function M.extract_components(components_opts, attributes, object, pane, format)
   local component_opts = require('tabline.config').component_opts
   local components = {}
@@ -83,7 +97,7 @@ function M.extract_components(components_opts, attributes, object, pane, format)
           if result.default_opts then
             opts = M.deep_extend(opts, result.default_opts)
           end
-          local component = M.create_component(result.update(object, opts), opts, object, attributes, format)
+          local component = M.create_component(safe_update(v, result, object, opts), opts, object, attributes, format)
           if component then
             M.insert_elements(components, component)
           end
@@ -100,7 +114,7 @@ function M.extract_components(components_opts, attributes, object, pane, format)
         end
         opts = M.deep_extend(opts, v)
         table.remove(opts, 1)
-        local component = M.create_component(result.update(object, opts), opts, object, attributes, format)
+        local component = M.create_component(safe_update(v[1], result, object, opts), opts, object, attributes, format)
         if component then
           M.insert_elements(components, component)
         end
